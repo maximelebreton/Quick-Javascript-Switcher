@@ -452,3 +452,16 @@ export const handleOpenV2UpdatePage = () => {
         height: 720,
     });
 }
+
+export const handleRequestTabsPermission = (callback: (granted: boolean) => void) => {
+
+    chrome.permissions.request({
+      permissions: ['tabs'],
+    }, (granted) => {
+      callback(granted)
+    });
+
+
+}
+
+

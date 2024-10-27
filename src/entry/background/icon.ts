@@ -1,5 +1,6 @@
 import { getJavascriptRuleSetting } from "./contentsettings";
 import { isPausedTab } from "./state";
+import { getDomainStorageRulesFromUrl } from "./storage";
 import {
   cl,
   getScopeSetting,
@@ -8,9 +9,21 @@ import {
   Log,
 } from "./utils";
 
+export const updateTitle = async (tab: chrome.tabs.Tab) => {
+  const domainRules = await getDomainStorageRulesFromUrl(tab.url ?? '')
+  const firstRule = Object.values(domainRules)[0]
+  const setting = await getJavascriptRuleSetting({primaryUrl: tab.url!, incognito: tab.incognito})
+  chrome.action.setTitle({
+    title: `Javascript is ${setting === 'allow' ? 'On' : 'Off'}: ${firstRule.primaryPattern}`,
+    tabId: tab.id
+  })
+}
+
 export const updateIcon = async (tab: chrome.tabs.Tab) => {
   cl("ICON UPDATED", Log.ICON);
   if (tab && tab.url) {
+    await updateTitle(tab)
+
     const ruleSetting = await getJavascriptRuleSetting({
       primaryUrl: tab.url,
       incognito: tab.incognito,

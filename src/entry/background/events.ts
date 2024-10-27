@@ -76,8 +76,10 @@ export const initEvents = () => {
     if (Array.isArray(currentRules)) {
       const convertedRules = convertOldRulesToNew(currentRules);
       await setStorage("rules", convertedRules);
+      await rebaseJavascriptSettingsFromStorage()
     }
   };
+  
 
   chrome.runtime.onInstalled.addListener(async (details) => {
     await updateContextMenus();
@@ -90,17 +92,15 @@ export const initEvents = () => {
       handleOpenV2UpdatePage()
     } else if (details.reason == "update") {
       const currentVersion = chrome.runtime.getManifest().version;
-      const isFromV1ToV2 =
-        details.previousVersion &&
-        satisfies(details.previousVersion, "<2.0.0") &&
-        satisfies(currentVersion, ">=2.0.0");
+      const isFromV1ToV2 = details.previousVersion && satisfies(details.previousVersion, "<2.0.0") && satisfies(currentVersion, ">=2.0.0");
+      const isBeforeV2_0_3 = details.previousVersion && satisfies(details.previousVersion, "<2.0.3");
 
       if (isFromV1ToV2) {
-        console.log(
-          `Updated from ${details.previousVersion} to ${currentVersion}, trying to convert existing rules.`
-        );
+        console.log(`Updated from ${details.previousVersion} to ${currentVersion}, trying to convert existing rules.`);
         await handleUpdateFromV1toV2();
         handleOpenV2UpdatePage()
+      } else if (isBeforeV2_0_3) {
+        await rebaseJavascriptSettingsFromStorage()
       }
     }
   });
