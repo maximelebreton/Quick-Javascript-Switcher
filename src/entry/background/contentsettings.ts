@@ -1,5 +1,5 @@
 import { isValidPrimaryPattern } from "../options/computed";
-import { clearJavascriptRules, handleClear, reloadTab } from "./actions";
+import { clearJavascriptContentSettingsWithPromise, clearJavascriptRules, handleClear, reloadTab } from "./actions";
 import { cl, isAllowedPattern, Log, sortUrlsByPatternPrecedence } from "./utils";
 import { updateIcon } from "./icon";
 import {
@@ -164,21 +164,42 @@ export const addJavascriptRule = async (rule: QJS.ContentSettingRule) => {
 export const rebaseJavascriptSettingsFromStorage = async () => {
   return new Promise<void>(async (resolve, reject) => {
     const storageRules = await getStorageRules();
-    clearJavascriptRules();
-    Object.entries(storageRules).forEach(([key, storageRule]) => {
-      chrome.contentSettings.javascript.set(storageRule, async () => {});
-    });
+    await clearJavascriptRules();
+
+    // Utiliser `for await...of` pour chaque règle dans storageRules
+    for await (const [key, storageRule] of Object.entries(storageRules)) {
+      await new Promise<void>((resolve) => {
+        chrome.contentSettings.javascript.set(storageRule, () => resolve());
+      });
+    }
+
     console.info("Rebased settings from storage");
     resolve();
   });
 };
 
+export const setJavascriptContentSettingWithPromise = async <T extends {
+  primaryPattern: string;
+  secondaryPattern?: string;
+  resourceIdentifier?: chrome.contentSettings.ResourceIdentifier;
+  setting: any;
+  scope?: chrome.contentSettings.Scope;
+}>(value: T) => {
+  return new Promise<void>(async (resolve, reject) => {
+  chrome.contentSettings.javascript.set(value, () => {
+      resolve()
+    })
+  })
+}
+
 export const removeJavascriptRule = async (
   rule: Pick<QJS.ContentSettingRule, "primaryPattern" | "scope">
 ) => {
   return new Promise<void>(async (resolve, reject) => {
-
     const storageRules = await getStorageRules();
+    console.log(rule.primaryPattern, 'removeJavascriptRule()')
+    console.log(storageRules, "STORAGE RULES BEFORE");
+
     if (
       storageRules &&
       storageRules[rule.primaryPattern] &&
@@ -186,13 +207,22 @@ export const removeJavascriptRule = async (
     ) {
       delete storageRules[rule.primaryPattern];
 
-      clearJavascriptRules();
+      await clearJavascriptContentSettingsWithPromise();
       console.info(`${rule.primaryPattern} rule removed from content settings`);
-      Object.entries(storageRules).forEach(([key, storageRule]) => {
-        chrome.contentSettings.javascript.set(storageRule, async () => {});
-      });
       await unsetStorageRule(rule);
+
+      console.log('Storage rules added to content settings:');
+
+      // Remplacement de forEach par for...of pour gérer les promesses correctement
+      for await (const [key, storageRule] of Object.entries(storageRules)) {
+        await setJavascriptContentSettingWithPromise(storageRule);
+        console.log(`${storageRule.setting}: ${storageRule.primaryPattern}`);
+      }
+      
+      console.log('END Storage rules added to content settings:');
     }
+
+    console.log(storageRules, "STORAGE RULES AFTER");
     resolve();
   });
 };

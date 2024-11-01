@@ -1,9 +1,11 @@
 import {
 
+  addJavascriptRule,
   clearJavascriptRule,
   getTabSetting,
   removeConflictedRulesFromPattern,
   removeJavascriptRule,
+  RuleSetting,
   setJavascriptRule,
 } from "./contentsettings";
 import { updateContextMenus } from "./contextmenus";
@@ -12,7 +14,7 @@ import { updateIcon } from "./icon";
 import { getState, isPausedTab, isPausedTabs, setTabsState } from "./state";
 import { clearStorageRules } from "./storage";
 import { getActiveTab } from "./tabs";
-import { cl, Log } from "./utils";
+import { cl, Log, PatternScheme, sortUrlsByPatternPrecedence } from "./utils";
 
 import {
   getDomainPatternFromUrl,
@@ -51,16 +53,20 @@ export const toggleJavaScript = async (tab: chrome.tabs.Tab) => {
   if (await isPausedTab(tab)) {
     await handlePlay(tab);
   } else {
-    const { subdomain, scheme } = await getUrlAsObject(tab.url!);
+    const { subdomain, scheme } = getUrlAsObject(tab.url!);
     const setting = await getTabSetting(tab);
     cl(`setting for ${tab.url} : ${setting}`, Log.ACTIONS);
 
     if (scheme === "file") {
       await handleToggleUrl(tab);
     } else {
+      console.log(subdomain.length, "SUBDOMAIN ???????????????")
       if (subdomain.length) {
+        console.log("TOGGLE SUBDOMAIN")
+
         await handleToggleSubdomain(tab);
       } else {
+        console.log("TOGGLE DOMAIN")
         await handleToggleDomain(tab);
       }
     }
@@ -127,6 +133,14 @@ export const clearJavascriptRules = () => {
     const tab = await getActiveTab();
     await updateIcon(tab);
   });
+};
+
+export const clearJavascriptContentSettingsWithPromise = async () => {
+  return new Promise<void>((resolve, reject) => {
+    chrome.contentSettings.javascript.clear({ scope: "regular" }, () => {
+      resolve()  
+    });
+  })
 };
 
 export const handleOpenShortcut = () => {
@@ -274,7 +288,69 @@ export const handlePause = async (tab: chrome.tabs.Tab) => {
   });
 };
 
-export const hanleToggleByPattern = async (tab: chrome.tabs.Tab, primaryPattern: string) => {
+export const getPotentialPatternSchemes = (scheme: PatternScheme): PatternScheme[] => {
+
+  if (scheme === 'http') {
+    return ['*', 'http']
+  } else if (scheme === 'https') {
+    return ['*', 'https']
+  } else if (scheme === 'file') {
+    return ['file']
+  } else if (scheme === '*') {
+    return ['*', 'http', 'https']
+  } else {
+    return ['*', scheme]
+  }
+
+}
+
+export const getPotentialPatterns = async (primaryPattern: string) => {
+
+  const {scheme, schemeSuffix, subdomain, domain, path} = getUrlAsObject(primaryPattern)
+
+  const potentialPatterns: string[] = []
+  
+  const schemes = getPotentialPatternSchemes(scheme)
+
+  const subdomains = scheme === 'file' ? [] : [subdomain]
+  if (subdomain !== '*.' && subdomain !== '') subdomains.push('*.')
+
+
+  schemes.forEach((_scheme) => {
+    subdomains.forEach((_subdomain) => {
+      const pathPattern = scheme === 'file' ? path : '/*'
+      const pattern = `${_scheme}${schemeSuffix}${_subdomain}${domain}${pathPattern}`;
+      potentialPatterns.push(pattern)
+    })
+  })
+
+  const sortedPotentialPatterns = sortUrlsByPatternPrecedence(potentialPatterns)
+
+
+  //const pattern = `${scheme}${schemeSuffix}${subdomain}${domain}${path}`;
+  return sortedPotentialPatterns
+}
+
+export const deepRemoveJavascriptRuleUntilSettingChange = async (
+  tab: chrome.tabs.Tab, 
+  primaryPattern: string, 
+  oldSetting: RuleSetting
+) => {
+  const potentialPatterns = await getPotentialPatterns(primaryPattern);
+
+  // Utiliser une boucle `for await...of` pour itérer sur les patterns
+  for await (const potentialPattern of potentialPatterns) {
+    if (oldSetting === await getTabSetting(tab)) {
+      console.log(`try to remove ${potentialPattern} !!!!!!!!!!!!!!!!!!`);
+      await removeJavascriptRule({
+        primaryPattern: potentialPattern,
+        scope: getScopeSetting(tab.incognito)
+      });
+    }
+  }
+};
+
+export const handleToggleByPattern = async (tab: chrome.tabs.Tab, primaryPattern: string) => {
 
   if (tab.url) {
     const oldSetting = await getTabSetting(tab)
@@ -283,26 +359,42 @@ export const hanleToggleByPattern = async (tab: chrome.tabs.Tab, primaryPattern:
     if (!primaryPattern) {
       return
     }
-    await removeConflictedRulesFromPattern(primaryPattern)
+    //await removeConflictedRulesFromPattern(primaryPattern)
 
-    console.info(`toggle from ${oldSetting} to ${newSetting}: ` + primaryPattern);
-    await setJavascriptRule({
-      primaryPattern,
-      scope: getScopeSetting(tab.incognito),
-      setting: newSetting,
-      tab,
-    });
-    
+    // 1: try to clear the primary pattern
+    await removeJavascriptRule({
+      primaryPattern: primaryPattern,
+      scope: getScopeSetting(tab.incognito)
+    })
+
+    // 2: if not toggle, try to deep clear the potential conflicted patterns
+    const isSame = oldSetting === await getTabSetting(tab)
+    console.log(isSame, "IS SAME ??????????????")
+    if (oldSetting === await getTabSetting(tab)) {
+       await deepRemoveJavascriptRuleUntilSettingChange(tab, primaryPattern, oldSetting)
+    }
+    // 3: if not toggle, set to allow
+    if (oldSetting === await getTabSetting(tab)) {
+      await addJavascriptRule({
+        primaryPattern,
+        scope: getScopeSetting(tab.incognito),
+        setting: newSetting
+      });
+    }
+    if (oldSetting !== newSetting) {
+      console.info(`toggle from ${oldSetting} to ${newSetting}: ` + primaryPattern);
+    }
+    await updateIcon(tab); //not needed because we update tab
+    reloadTab(tab);
 
   }
-
 }
 
 export const handleToggleSubdomain = async (tab: chrome.tabs.Tab) => {
   if (tab.url) {
     const primaryPattern = getSubdomainPatternFromUrl(tab.url);
     if (primaryPattern) {
-      await hanleToggleByPattern(tab, primaryPattern)
+      await handleToggleByPattern(tab, primaryPattern)
     }
   }
 }
@@ -311,7 +403,7 @@ export const handleToggleDomain = async (tab: chrome.tabs.Tab) => {
     if (tab.url) {
       const primaryPattern = getDomainPatternFromUrl(tab.url);
       if (primaryPattern) {
-        await hanleToggleByPattern(tab, primaryPattern)
+        await handleToggleByPattern(tab, primaryPattern)
       }
     }
 };    
@@ -319,7 +411,7 @@ export const handleToggleDomain = async (tab: chrome.tabs.Tab) => {
 export const handleToggleUrl = async (tab: chrome.tabs.Tab) => {
   if (tab.url) {
     const primaryPattern = getUrlPatternFromUrl(tab.url);
-    await hanleToggleByPattern(tab, primaryPattern)
+    await handleToggleByPattern(tab, primaryPattern)
   }
 }; 
 

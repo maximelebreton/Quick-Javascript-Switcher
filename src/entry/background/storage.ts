@@ -27,7 +27,6 @@ export const getUseSyncFromStorage = () => {
 
       result = value["useSync"] ? JSON.parse(value["useSync"]) : true;
 
-      console.log("VALUE", result);
       resolve(result);
     });
   });
@@ -58,10 +57,10 @@ export const getStorageMethod = async () => {
       // });
       const useSync = await getUseSyncFromStorage();
       if (useSync === true) {
-        console.info("Chrome storage method: Sync");
+        cl("Chrome storage method: Sync", Log.STORAGE);
         resolve(chrome.storage.sync);
       } else {
-        console.info("Chrome storage method: Local");
+        cl("Chrome storage method: Local", Log.STORAGE);
         resolve(chrome.storage.local);
       }
     }

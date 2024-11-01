@@ -6,6 +6,7 @@
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "test:unit": "vue-cli-service test:unit",
+    "test:watch": "vue-cli-service test:unit --watch",
     "lint": "vue-cli-service lint",
     "build-watch": "vue-cli-service build-watch --mode development",
     "zip": "cd .build && bestzip ../quick-javascript-switcher-%npm_package_version%.zip *",
