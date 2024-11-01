@@ -154,7 +154,8 @@ export const addContextMenu = ({
 };
 
 export const createContextMenus = () => {
-  addContextMenu({ id: ContextMenus.PLAY_PAUSE });
+  // REMOVED BECAUSE NEEDS DEBUGGER PERMISSION AND USERS AREN'T OKAY WITH THIS
+  //addContextMenu({ id: ContextMenus.PLAY_PAUSE });
 
   // ALLOW
   // addContextMenu({
@@ -450,7 +451,8 @@ export const updateContextMenus = async () => {
   if (activeTab && activeTab.url) {
     await updateSubdomainContextMenu(activeTab);
     await updateDomainContextMenu(activeTab);
-    await updatePlayPauseContextMenu(activeTab);
+    // REMOVED BECAUSE NEEDS DEBUGGER PERMISSION AND USERS AREN'T OKAY WITH THIS
+    //await updatePlayPauseContextMenu(activeTab);
     await updateSupportMenu();
 
     chrome.contextMenus.update(ContextMenus.SHORTCUT, {

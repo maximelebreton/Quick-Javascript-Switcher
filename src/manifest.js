@@ -11,7 +11,7 @@ module.exports = {
     "contentSettings",
     "contextMenus",
     "storage",
-    "debugger",
+    //"debugger",
   ],
   //optional_permissions: ["tabs"],
   incognito: "spanning",
