@@ -17,6 +17,7 @@ import {
   handleOpenShortcut,
   handlePause,
   handlePlayPause,
+  handleToggleGlobal,
 } from "./actions";
 import {
   cl,
@@ -38,6 +39,7 @@ import { getStorageRules } from "./storage";
 import { ACTION_SHORTCUT_NAME } from "./constants";
 
 export enum ContextMenus {
+  TOGGLE_GLOBAL = "TOGGLE_GLOBAL",
   PLAY_PAUSE = "PLAY_PAUSE",
   BLOCK_SUBDOMAIN = "BLOCK_SUBDOMAIN",
   BLOCK_DOMAIN = "BLOCK_DOMAIN",
@@ -79,6 +81,7 @@ const SETTINGS_CONTEXT: [
 ] = DEFAULT_CONTEXT;
 
 const titles = {
+  [ContextMenus.TOGGLE_GLOBAL]: "Toggle global",
   [ContextMenus.PLAY_PAUSE]: "Pause JavaScript",
   [ContextMenus.BLOCK]: "Block",
   [ContextMenus.BLOCK_SUBDOMAIN]: "Block subdomain",
@@ -156,6 +159,12 @@ export const addContextMenu = ({
 export const createContextMenus = () => {
   // REMOVED BECAUSE NEEDS DEBUGGER PERMISSION AND USERS AREN'T OKAY WITH THIS
   //addContextMenu({ id: ContextMenus.PLAY_PAUSE });
+
+
+  // For Next 2.2.0 version
+  // addContextMenu({
+  //   id: ContextMenus.TOGGLE_GLOBAL
+  // })
 
   // ALLOW
   // addContextMenu({
@@ -485,6 +494,9 @@ export const handleContextMenu = (
   tab: chrome.tabs.Tab
 ) => {
   switch (info.menuItemId) {
+    case ContextMenus.TOGGLE_GLOBAL:
+      handleToggleGlobal(tab);
+      break;
     case ContextMenus.PLAY_PAUSE:
       handlePlayPause(tab);
       break;

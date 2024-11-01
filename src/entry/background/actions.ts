@@ -557,3 +557,28 @@ export const handleRequestTabsPermission = (callback: (granted: boolean) => void
 }
 
 
+export const getGlobalJavascriptState = async () => {
+  const {incognito} = await chrome.windows.getCurrent();
+  const data = {
+    'primaryUrl': 'http://*',
+    'incognito': incognito || false
+  };
+
+  const rule = await chrome.contentSettings.javascript.get(data);
+  return rule;
+}
+
+
+export const handleToggleGlobal = async (tab: chrome.tabs.Tab) => {
+  const {incognito} = await chrome.windows.getCurrent();
+  const {setting} = await getGlobalJavascriptState()
+  
+  await chrome.contentSettings.javascript.set({
+    'primaryPattern': '<all_urls>',
+    'setting': (setting === 'block') ? 'allow' : 'block',
+    'scope': (incognito === true) ? 'incognito_session_only' : 'regular'
+  })
+  await updateIcon(tab);
+
+  reloadTab(tab)
+}
