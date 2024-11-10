@@ -32,6 +32,7 @@ export const handleIconClick = async (tab: chrome.tabs.Tab) => {
 
 export const toggleJavaScript = async (tab: chrome.tabs.Tab) => {
   cl("Toggle JavaScript", Log.ACTIONS);
+  console.log(`Toggle JavaScript url: ${tab.url}`);
   // const rule = await getJavascriptRuleSetting({
   //   primaryUrl: tab.url!,
   //   incognito: tab.incognito,
@@ -128,7 +129,7 @@ export const handlePlayPause = async (tab: chrome.tabs.Tab) => {
 
 export const clearJavascriptRules = () => {
   chrome.contentSettings.javascript.clear({ scope: "regular" }, async () => {
-    console.info("QJS javascript rules cleared!");
+    console.info("QJS javascript content settings cleared!");
     await updateContextMenus();
     const tab = await getActiveTab();
     await updateIcon(tab);
@@ -306,7 +307,7 @@ export const getPotentialPatternSchemes = (scheme: PatternScheme): PatternScheme
 
 export const getPotentialPatterns = async (primaryPattern: string) => {
 
-  const {scheme, schemeSuffix, subdomain, domain, path} = getUrlAsObject(primaryPattern)
+  const {scheme, schemeSuffix, subdomain, domain, path, hostWithoutSubdomain} = getUrlAsObject(primaryPattern)
 
   const potentialPatterns: string[] = []
   
@@ -319,7 +320,7 @@ export const getPotentialPatterns = async (primaryPattern: string) => {
   schemes.forEach((_scheme) => {
     subdomains.forEach((_subdomain) => {
       const pathPattern = scheme === 'file' ? path : '/*'
-      const pattern = `${_scheme}${schemeSuffix}${_subdomain}${domain}${pathPattern}`;
+      const pattern = `${_scheme}${schemeSuffix}${_subdomain}${hostWithoutSubdomain}${pathPattern}`;
       potentialPatterns.push(pattern)
     })
   })

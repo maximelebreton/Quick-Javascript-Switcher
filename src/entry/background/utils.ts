@@ -35,11 +35,11 @@ export const cl = (message: any, type?: Log, name?: string) => {
 };
 
 export const getUrlPatterns = (url: string) => {
-  const { scheme, schemeSuffix, subdomain, domain, path } = getUrlAsObject(url);
+  const { scheme, schemeSuffix, subdomain, domain, path, hostWithoutSubdomain } = getUrlAsObject(url);
 
   const patterns = {
-    subdomain: `${scheme}${schemeSuffix}${subdomain}${domain}/*`,
-    domain: `${scheme}${schemeSuffix}*.${domain}/*`,
+    subdomain: `${scheme}${schemeSuffix}${subdomain}${hostWithoutSubdomain}/*`,
+    domain: `${scheme}${schemeSuffix}*.${hostWithoutSubdomain}/*`,
   };
   return patterns;
 };
@@ -75,21 +75,22 @@ export const getUrlPatterns = (url: string) => {
 //   return precedence;
 // };
 
-export function canHaveSubdomain(url: string): boolean {
-  const { domain, schemeSuffix, hostname, scheme } = getUrlAsObject(url);
+export function canHaveWildcard(url: string): boolean {
+  const { hostname, scheme } = getUrlAsObject(url);
 
-  // Vérifier si le hostname est une adresse IPv4
-  const isIPv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-
-  // Vérifier si le hostname est une adresse IPv6
-  const isIPv6 = /^\[.*\]$/.test(hostname); // Format IPv6 entre crochets (ex : [::1])
-
+  // Supprimer le port si présent dans le hostname (format host:port)
   const hostnameWithoutPort = hostname.split(":")[0];
 
-  // Vérifier si le hostname est 'localhost'
+  // Vérifier si le hostname sans port est une adresse IPv4
+  const isIPv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostnameWithoutPort);
+
+  // Vérifier si le hostname sans port est une adresse IPv6 (entre crochets pour les URL)
+  const isIPv6 = /^\[.*\]$/.test(hostnameWithoutPort);
+
+  // Vérifier si le hostname sans port est 'localhost'
   const isLocalhost = hostnameWithoutPort === "localhost";
 
-  // Si c'est une adresse IP ou localhost, il ne peut pas avoir de sous-domaine
+  // Si l'URL contient une IP, est en localhost, ou est un fichier local, elle ne peut pas avoir de wildcard
   if (isIPv4 || isIPv6 || isLocalhost || scheme === 'file') {
     return false;
   }
@@ -98,15 +99,16 @@ export function canHaveSubdomain(url: string): boolean {
   return true;
 }
 
+
 export const getSubdomainPatternFromUrl = (url: string) => {
   if (!isAllowedUrl(url)) {
     return null;
   }
-  const { domain, subdomain, schemeSuffix } = getUrlAsObject(url);
+  const { domain, subdomain, schemeSuffix, hostWithoutSubdomain } = getUrlAsObject(url);
   if (subdomain === null) {
     return null;
   }
-  const pattern = `*${schemeSuffix}${subdomain}${domain}/*`;
+  const pattern = `*${schemeSuffix}${subdomain}${hostWithoutSubdomain}/*`;
 
   return pattern;
 };
@@ -114,14 +116,14 @@ export const getDomainPatternFromUrl = (url: string) => {
   if (!isAllowedUrl(url)) {
     return null;
   }
-  const { domain, schemeSuffix, hostname, scheme, path } = getUrlAsObject(url);
+  const { domain, schemeSuffix, hostWithoutSubdomain, scheme, path, port } = getUrlAsObject(url);
   if (domain === null) {
     return null;
   }
-  const wildcardIfSubdomain = canHaveSubdomain(url) ? '*.' : ''
-  const schemeIfSubdomain = canHaveSubdomain(url) ? '*' : scheme
+  const wildcardIfSubdomain = canHaveWildcard(url) ? '*.' : ''
+  const schemeIfSubdomain = canHaveWildcard(url) ? '*' : scheme
   const pathIfDomain = scheme === 'file' ? path : '/*'
-  const pattern = `${schemeIfSubdomain}${schemeSuffix}${wildcardIfSubdomain}${domain}${pathIfDomain}`;
+  const pattern = `${schemeIfSubdomain}${schemeSuffix}${wildcardIfSubdomain}${hostWithoutSubdomain}${pathIfDomain}`;
   return pattern;
 };
 export const getUrlPatternFromUrl = (url: string) => {
@@ -143,59 +145,80 @@ export const getScopeSetting = (incognito: chrome.tabs.Tab["incognito"]) => {
   return incognito ? "incognito_session_only" : "regular";
 };
 export const getUrlAsObject = (url: string) => {
-  // Utiliser une regex pour capturer les différentes parties de l'URL manuellement
-  const urlRegex = /^(.*?):\/\/\/?([^\/]*)(\/?.*)$/;
+  // Nouvelle regex pour inclure la détection de `file:///` avec lettre de lecteur
+  const urlRegex = /^(.*?):\/\/\/?([a-zA-Z]:)?([^\/:]*)(:(\d+))?(\/?.*)$/;
   const matches = url.match(urlRegex);
 
+  // Initialisation des variables
   let scheme: PatternScheme;
-  let hostname = "";
-  let pathname = "";
+  let hostname;
+  let pathname;
+  let port;
+  let host;
+  let domain;
+  let subdomain;
 
-  if (matches) {
-    scheme = matches[1] as PatternScheme; // Récupérer le scheme (ex: http, https, *)
-    hostname = matches[2]; // Récupérer le hostname (domaine + sous-domaine ou IP)
-    pathname = matches[3]; // Récupérer le chemin (path)
-  } else {
-    console.error('Invalid url!');
-    throw Error('Invalid url!');
+  if (!matches) {
+    throw new Error(`Invalid URL: ${url}`);
   }
 
-  const schemeSuffix: PatternSchemeSuffix = scheme === "file" ? ":///" : "://";
-  const pathnameUntilLastSlash = pathname.substr(0, pathname.lastIndexOf("/"));
+  // Extraction des parties principales de l'URL
+  scheme = matches[1] as PatternScheme;
+  hostname = matches[2] ? matches[2].slice(0, -1) : matches[3]; // Récupère "C" pour `file:///C:/...`
+  port = matches[5] || "";
+  pathname = matches[6] || "";
+  const schemeSuffix = scheme === "file" ? ":///" : "://";
+  
+  const pathnameUntilLastSlash = pathname.includes("/")
+    ? pathname.slice(0, pathname.lastIndexOf("/"))
+    : "";
 
-  // Vérifier si le hostname est une adresse IP (IPv4 ou IPv6)
-  const isIpAddress = /^(?:\d{1,3}\.){3}\d{1,3}$|^\[.*\]$/.test(hostname);
+  // Cas spécial : URL de type file:// avec lettre de lecteur (ex: C: sous Windows)
+  const isWindowsDrive = scheme === "file" && /^[a-zA-Z]$/.test(hostname);
 
-  // Diviser le hostname en sous-domaine et domaine si ce n'est pas une adresse IP
-  let domain = "";
-  let subdomain = "";
-
-  if (isIpAddress) {
-    domain = hostname;
-    subdomain = ""; // Pas de sous-domaine pour les adresses IP
+  if (isWindowsDrive) {
+    domain = host = hostname = hostname + ':';
+    pathname = pathname.startsWith(":") ? pathname.slice(1) : pathname;
   } else {
-    const domainParts = hostname.split(".");
-    if (domainParts.length > 2) {
-      domain = domainParts.slice(-2).join(".");
-      subdomain = domainParts.slice(0, -2).join(".");
-    } else {
+    // Construction du host complet pour les URLs standards (http, https, etc.)
+    host = `${hostname}${port ? `:${port}` : ''}`;
+
+    // Vérification si le hostname est une IP
+    const isIpAddress = /^(?:\d{1,3}\.){3}\d{1,3}$|^\[.*\]$/.test(hostname);
+    
+    if (isIpAddress) {
       domain = hostname;
-      subdomain = "";
+    } else {
+      // Division du hostname en sous-domaine et domaine
+      const domainParts = hostname.split(".");
+      if (domainParts.length > 2) {
+        domain = domainParts.slice(-2).join(".");
+        subdomain = domainParts.slice(0, -2).join(".");
+      } else {
+        domain = hostname;
+      }
     }
   }
 
-  const fixedSubdomain = subdomain.length ? `${subdomain}.` : "";
+  const fixedSubdomain = subdomain ? `${subdomain}.` : "";
+  const hostWithoutSubdomain = `${domain}${port ? `:${port}` : ''}`;
 
   return {
-    hostname,
     scheme,
     schemeSuffix,
+    host,
+    hostname,
     domain,
     subdomain: fixedSubdomain,
+    port,
     path: pathname,
     pathnameUntilLastSlash,
+    hostWithoutSubdomain,
   };
 };
+
+
+
 // export const getUrlAsObject = (url: string) => {
 //   const { domain, subdomain } = parse(url);
 //   const { pathname, protocol, hostname } = new URL(url);
@@ -288,7 +311,7 @@ export const retry = <T>(fn: () => Promise<T>, ms: number): Promise<T> =>
 
   export function sortUrlsByPatternPrecedence(urls: string[]) {
       const calculateScore = (url: string) => {
-        const { scheme, subdomain, domain, path } = getUrlAsObject(url);
+        const { scheme, subdomain, hostWithoutSubdomain, path } = getUrlAsObject(url);
         let score = 0;
     
         // Score pour le scheme
@@ -300,7 +323,7 @@ export const retry = <T>(fn: () => Promise<T>, ms: number): Promise<T> =>
         else if (subdomain) score += 2;
     
         // Score pour le domaine : plus élevé pour les domaines spécifiques
-        if (domain) score += 2;
+        if (hostWithoutSubdomain) score += 2;
     
         // Score pour le chemin : plus long = plus spécifique
         score += path === "/*" ? 1 : 2;
@@ -313,15 +336,3 @@ export const retry = <T>(fn: () => Promise<T>, ms: number): Promise<T> =>
     };
 
 
-
-export function getDomainAndSubdomain(url: string) {
-  try {
-      const parsedUrl = new URL(url);
-      const hostname = parsedUrl.hostname;
-      
-      return hostname;
-  } catch (error) {
-      console.error('Invalid url:', error);
-      return null;
-  }
-}

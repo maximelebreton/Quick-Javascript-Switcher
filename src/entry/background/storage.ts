@@ -1,7 +1,7 @@
 import { merge } from "lodash";
 import { RuleSetting } from "./contentsettings";
 import { getState, State } from "./state";
-import { cl, getDomainAndSubdomain, getUrlAsObject, Log } from "./utils";
+import { cl, getUrlAsObject, Log } from "./utils";
 import { Options } from "./_types";
 
 // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -100,13 +100,12 @@ export const getStorageRules = async () => {
 export const getDomainStorageRulesFromUrl = async (url: string) => {
   const rules = await getStorageRules()
   return Object.entries(rules).reduce<QJS.ContentSettingRules>((acc, [pattern, setting]) => {
-    const { domain: urlDomain } = getUrlAsObject(url);
-    const { domain: patternDomain } = getUrlAsObject(pattern);
+    const { hostWithoutSubdomain: urlHost } = getUrlAsObject(url);
+    const { hostWithoutSubdomain: patternHost } = getUrlAsObject(pattern);
 
-    //const urlDomainAndSubdomain = getDomainAndSubdomain(url)
     cl(pattern, Log.STORAGE, 'Options rules contains primary url domain')
     //const isTrue = urlDomainAndSubdomain ? pattern.includes(urlDomainAndSubdomain) : false
-    return urlDomain === patternDomain ? {...acc, ...{[pattern]: setting}} : acc
+    return urlHost === patternHost ? {...acc, ...{[pattern]: setting}} : acc
   }, {})
 }
 

@@ -46,20 +46,20 @@ export const getJavascriptRuleSetting = async ({
 
 
 export const removeConflictedRulesFromPattern = async (tabPattern: string) => {
-  const { scheme: tabScheme, subdomain: tabSubdomain, domain: tabDomain } = getUrlAsObject(tabPattern);
+  const { scheme: tabScheme, subdomain: tabSubdomain, domain: tabDomain, hostWithoutSubdomain: tabHost } = getUrlAsObject(tabPattern);
 
   const existingDomainRules = await getDomainStorageRulesFromUrl(tabPattern)
   //const existingDomainPatterns = Object.values(existingDomainRules).map(({primaryPattern}) => primaryPattern)
  // const sortedPatternsByPrecedence = sortUrlsByPatternPrecedence(existingDomainPatterns)
   
   Object.entries(existingDomainRules).forEach(async ([storagePattern, rule]) => {
-    const { scheme: storageScheme, subdomain: storageSubdomain, domain: storageDomain } = getUrlAsObject(storagePattern);
-    cl({urlScheme: tabScheme, patternScheme: storageScheme, urlSubdomain: tabSubdomain, patternSubdomain: storageSubdomain, urlDomain: tabDomain, patternDomain: storageDomain}, Log.RULES, "Potential conflicted rules with: "+tabPattern)
-    if (tabScheme !== storageScheme && tabSubdomain === storageSubdomain && tabDomain === storageDomain) {
+    const { scheme: storageScheme, subdomain: storageSubdomain, domain: storageDomain, hostWithoutSubdomain: storageHost } = getUrlAsObject(storagePattern);
+    cl({urlScheme: tabScheme, patternScheme: storageScheme, urlSubdomain: tabSubdomain, patternSubdomain: storageSubdomain, urlDomain: tabDomain, patternDomain: storageDomain, urlHost: tabHost, patternHost: storageHost}, Log.RULES, "Potential conflicted rules with: "+tabPattern)
+    if (tabScheme !== storageScheme && tabSubdomain === storageSubdomain && tabHost === storageHost) {
       await removeJavascriptRule(rule)
       cl(`Conflicted rule removed: ${storagePattern} (conflict with url: ${tabPattern})`, Log.RULES)
     } 
-    if ((tabSubdomain === '*.' && storageSubdomain === '') && tabDomain === storageDomain) {
+    if ((tabSubdomain === '*.' && storageSubdomain === '') && tabHost === storageHost) {
       await removeJavascriptRule(rule)
       console.warn(`Conflicted rule removed: ${storagePattern} (conflict with url: ${tabPattern})`)
     }
@@ -69,7 +69,6 @@ export const removeConflictedRulesFromPattern = async (tabPattern: string) => {
 }
 
 
-export const removePrimaryPatternFromRules = (primaryPattern: string) => {};
 
 export const setJavascriptRule = ({
   setting,
@@ -164,7 +163,7 @@ export const addJavascriptRule = async (rule: QJS.ContentSettingRule) => {
 export const rebaseJavascriptSettingsFromStorage = async () => {
   return new Promise<void>(async (resolve, reject) => {
     const storageRules = await getStorageRules();
-    await clearJavascriptRules();
+    await clearJavascriptContentSettingsWithPromise();
 
     // Utiliser `for await...of` pour chaque règle dans storageRules
     for await (const [key, storageRule] of Object.entries(storageRules)) {
@@ -228,16 +227,16 @@ export const removeJavascriptRule = async (
 };
 
 export const searchRulesForTab = async (tab: chrome.tabs.Tab) => {
-  const { subdomain, domain } = getUrlAsObject(tab.url!);
+  const { subdomain, hostWithoutSubdomain } = getUrlAsObject(tab.url!);
 
   const rules = {
     subdomain: [
-      `http://*.${domain}/*`,
-      `http://${subdomain}${domain}/*`,
-      `https://*.${domain}/*`,
-      `https://${subdomain}${domain}/*`,
+      `http://*.${hostWithoutSubdomain}/*`,
+      `http://${subdomain}${hostWithoutSubdomain}/*`,
+      `https://*.${hostWithoutSubdomain}/*`,
+      `https://${subdomain}${hostWithoutSubdomain}/*`,
     ],
-    domain: [`http://${domain}/*`, `https://${domain}/*`],
+    domain: [`http://${hostWithoutSubdomain}/*`, `https://${hostWithoutSubdomain}/*`],
   };
 
   const subdomainPromises = rules.subdomain.map(async (url) => {

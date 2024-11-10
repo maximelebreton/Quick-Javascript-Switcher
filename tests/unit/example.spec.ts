@@ -32,7 +32,10 @@ describe('getPatterns', () => {
 describe('It should extract url as object', () => {
   it('should extract the correct url object', () =>  {
     expect(getUrlAsObject('https://github.com/*')).toEqual({
+      host: 'github.com',
+      hostWithoutSubdomain: 'github.com',
       hostname: 'github.com',
+      port: "",
       scheme: 'https',
       schemeSuffix: '://',
       domain: 'github.com',
@@ -42,7 +45,10 @@ describe('It should extract url as object', () => {
     });
 
     expect(getUrlAsObject('https://gist.github.com/*')).toEqual({
+      host: 'gist.github.com',
+      hostWithoutSubdomain: 'github.com',
       hostname: 'gist.github.com',
+      port: "",
       scheme: 'https',
       schemeSuffix: '://',
       domain: 'github.com',
@@ -52,7 +58,10 @@ describe('It should extract url as object', () => {
     });
 
     expect(getUrlAsObject('https://*.github.com/*')).toEqual({
+      host: '*.github.com',
+      hostWithoutSubdomain: 'github.com',
       hostname: '*.github.com',
+      port: '',
       scheme: 'https',
       schemeSuffix: '://',
       domain: 'github.com',
@@ -62,7 +71,10 @@ describe('It should extract url as object', () => {
     });
 
     expect(getUrlAsObject('*://*.github.com/*')).toEqual({
+      host: '*.github.com',
+      hostWithoutSubdomain: 'github.com',
       hostname: '*.github.com',
+      port: '',
       scheme: '*',
       schemeSuffix: '://',
       domain: 'github.com',
@@ -73,7 +85,10 @@ describe('It should extract url as object', () => {
     
     
     expect(getUrlAsObject('file:///C:/Users/Public/index.html')).toEqual({
+      host: 'C:',
+      hostWithoutSubdomain: 'C:',
       hostname: 'C:',
+      port: '',
       scheme: 'file',
       schemeSuffix: ':///',
       domain: 'C:',
@@ -83,22 +98,42 @@ describe('It should extract url as object', () => {
     });
     
     expect(getUrlAsObject('http://localhost:3000/index.html')).toEqual({
-      hostname: 'localhost:3000',
+      host: 'localhost:3000',
+      hostWithoutSubdomain: 'localhost:3000',
+      hostname: 'localhost',
+      port: '3000',
       scheme: 'http',
       schemeSuffix: '://',
-      domain: 'localhost:3000',
+      domain: 'localhost',
       subdomain: '',
       path: '/index.html',
       pathnameUntilLastSlash: '',
     });
     
-    expect(getUrlAsObject('http://localhost:8080/')).toEqual({
-      hostname: 'localhost:8080',
+    expect(getUrlAsObject('http://127.0.0.1:8080/')).toEqual({
+      host: '127.0.0.1:8080',
+      hostWithoutSubdomain: '127.0.0.1:8080',
+      hostname: '127.0.0.1',
+      port: '8080',
       scheme: 'http',
       schemeSuffix: '://',
-      domain: 'localhost:8080',
+      domain: '127.0.0.1',
       subdomain: '',
       path: '/',
+      pathnameUntilLastSlash: '',
+    });
+
+
+    expect(getUrlAsObject('http://10.10.1.1:8080/test')).toEqual({
+      host: '10.10.1.1:8080',
+      hostWithoutSubdomain: '10.10.1.1:8080',
+      hostname: '10.10.1.1',
+      port: '8080',
+      scheme: 'http',
+      schemeSuffix: '://',
+      domain: '10.10.1.1',
+      subdomain: '',
+      path: '/test',
       pathnameUntilLastSlash: '',
     });
   })
@@ -158,7 +193,7 @@ describe('It should get potential patterns and sort it by precedence', () => {
   })
 
   it('should throw an error for an invalid URL', () => {
-    expect(() => getUrlAsObject('invalid-url')).toThrowError('Invalid url!');
+    expect(() => getUrlAsObject('invalid-url')).toThrowError();
   });
 
 })
