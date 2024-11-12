@@ -4,7 +4,7 @@ import { getEditedRuleIndex, getInputRule, getRules } from "./computed";
 import { getStorageRules, QJS } from "../background/storage";
 import {
   addJavascriptRule,
-  removeJavascriptRule,
+  removeJavascriptRuleIfExistInStorage,
 } from "../background/contentsettings";
 
 export const fetchRules = async () => {
@@ -108,7 +108,7 @@ export const updateRule = async (
 
   const editedRule = getRuleByIndex(index);
   console.log(editedRule, " EDITED RULE");
-  await removeJavascriptRule(editedRule);
+  await removeJavascriptRuleIfExistInStorage(editedRule);
   console.info(editedRule, "RULE REMOVED");
 
   await addRule(rule);
@@ -127,7 +127,7 @@ export const getRuleByIndex = (index: number) => {
 export const removeRule = async (index: number) => {
   // state.rules.splice(index, 1);
   const rule = getRuleByIndex(index);
-  await removeJavascriptRule(rule);
+  await removeJavascriptRuleIfExistInStorage(rule);
   await fetchRules();
   if (state.isEditMode && getEditedRuleIndex.value === index) {
     resetEditState();

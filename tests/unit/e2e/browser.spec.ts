@@ -2,7 +2,8 @@ import { CDPSession, Page } from 'puppeteer-core';
 import bootstrap, {BootstrapContext} from "./bootstrap"
 import { RuleSetting } from '@/entry/background/contentsettings';
 import { handleToggleGlobal } from '@/entry/background/actions';
-import {evaluateFromExtensionWorker, triggerActionClick} from "./utils"
+import {evaluateFromExtensionWorker, getActiveTab, getJavascriptContentSetting, setJavascriptContentSetting, triggerActionClick} from "./utils"
+import { getDomainPatternFromUrl } from '@/entry/background/utils';
 jest.setTimeout(10000)
 
 
@@ -13,27 +14,6 @@ async function createCDPClient (page: Page) {
 }
 
 
-
-
-
-
-async function getJavascriptContentSetting (context: BootstrapContext) {
- 
-  return await context.extensionWorker?.evaluate(() => {
-    return new Promise<RuleSetting>((resolve, reject) => {
-      chrome.tabs.query({ active: true }, async (tabs) => {
-        
-        //chrome.action.onClicked.dispatch(tabs[0]);
-        const {setting} = await chrome.contentSettings.javascript.get({
-          primaryUrl: tabs[0].url!,
-          incognito: tabs[0].incognito
-        })
-        resolve(setting)
-      })
-    })
-  })
-
-}
 
 
 async function testToggleWithUrl (context: BootstrapContext, url: string) {
@@ -60,10 +40,10 @@ async function testToggleWithUrl (context: BootstrapContext, url: string) {
 
     }
 
-
-    console.log(`BEFORE: ${url} content setting: `+await getJavascriptContentSetting(context))
-
-    expect(await getJavascriptContentSetting(context)).toBe('allow');
+    const activeTab = await getActiveTab(context)
+    const {setting: beforeSetting} = await getJavascriptContentSetting(context, {primaryUrl: activeTab?.url!, incognito: false})
+    console.log(`BEFORE: ${url} content setting: `+beforeSetting)
+    expect(['allow', 'block']).toContain(beforeSetting);
 
     await triggerActionClick(context)
 
@@ -77,10 +57,21 @@ async function testToggleWithUrl (context: BootstrapContext, url: string) {
 
     //await page.screenshot( {path: 'screenshot.jpg'})
 
-  
-    console.log(`AFTER: ${url} content setting: `+await getJavascriptContentSetting(context))
+    const {setting: afterSetting} = await getJavascriptContentSetting(context, {primaryUrl: activeTab?.url!, incognito: false})
 
-    expect(await getJavascriptContentSetting(context)).toBe('block');
+    console.log(`AFTER: ${url} content setting: `+afterSetting)
+
+    
+    try {
+      if (beforeSetting === 'allow') {
+        expect(afterSetting).toBe('block');
+      }
+      if (beforeSetting === 'block') {
+        expect(afterSetting).toBe('allow');
+      }
+   } catch(e) {
+      throw new Error(`Expected setting to be '${beforeSetting === 'allow' ? 'block'  : 'allow'}', but got '${afterSetting}' on ${url}`)
+    }
     
     // remove toggle
     //await triggerActionClick(context)
@@ -103,62 +94,62 @@ describe('When javascript is enabled, toggle should block sites', () => {
     domainOnly: 'https://maximelebreton.com',
     withSubdomain: 'https://gist.github.com',
     localIpWithoutPort: 'http://127.0.0.1',
-    externalIpWithPort: 'http://10.10.1.1:3000/test',
-    localhost: 'http://localhost:3000'
+    externalIpWithPort: 'http://10.10.1.1:3000',
+    localhost: 'http://localhost:3000',
   }
 
 
-  it('Should block content settings', async () => {
+  it('Should toggle content settings', async () => {
     
-    for await (const [url] of Object.values(urls)) {
+    for await (const url of Object.values(urls)) {
       
-      await evaluateFromExtensionWorker(context, async () => await chrome.contentSettings.javascript.set({
-        primaryPattern: url,
-        scope: "regular",
-        setting: 'block'
-      }))
+      const {setting: startSetting} = await getJavascriptContentSetting(context, {primaryUrl: url, incognito: false})
+      expect(startSetting).toBe('allow' as RuleSetting);
+
+      await setJavascriptContentSetting(context, {primaryPattern: url+'/*', setting: 'block' as RuleSetting, 'scope': 'regular'});
+      const {setting: beforeSetting} = await getJavascriptContentSetting(context, {primaryUrl: url, incognito: false})
+      expect(beforeSetting).toBe('block' as RuleSetting);
+      await testToggleWithUrl(context, url)
+      const {setting: afterSetting} = await getJavascriptContentSetting(context, {primaryUrl: url, incognito: false})
+      expect(afterSetting).toBe('allow' as RuleSetting);
       
     }
 
-    for await (const [url] of Object.values(urls)) {
-      await evaluateFromExtensionWorker(context, async () => {
+      await testToggleWithUrl(context, 'file:///C:/Users/Public/index.html')
 
-        const {setting} = await chrome.contentSettings.javascript.get({
-          primaryUrl: url,
-          incognito: false
-        })
-        console.log('setting: '+setting)
-        expect(setting).toBe('block');
-      })
-    }
+    // for await (const url of Object.values(urls)) {
+    //   console.log(url, 'URL')
+    //   const {setting} = await getJavascriptContentSetting(context, {primaryUrl: url, incognito: false})
+    //   expect(setting).toBe('block' as RuleSetting);
+    // }
 
 
   });
 
   // // Test de la page GitHub
   // it('Domain only', async () => {
-  //   const url = 'https://maximelebreton.com'
-  //   await testToggleWithUrl(context, url)
+  //   //const url = 'https://maximelebreton.com'
+  //   await testToggleWithUrl(context, urls.domainOnly)
   // });
 
   // it('Subdomain', async () => {
-  //   const url = 'https://gist.github.com'
-  //   await testToggleWithUrl(context, url)
+  //   //const url = 'https://gist.github.com'
+  //   await testToggleWithUrl(context,  urls.withSubdomain)
   // });
 
   // it('Local ip address', async () => {
-  //   const url = 'http://127.0.0.1'
-  //   await testToggleWithUrl(context, url)
+  //   //const url = 'http://127.0.0.1'
+  //   await testToggleWithUrl(context, urls.localIpWithoutPort)
   // });
   
   // it('External ip address', async () => {
-  //   const url = 'http://10.10.1.1:3000/test'
-  //   await testToggleWithUrl(context, url)
+  //   //const url = 'http://10.10.1.1:3000/test'
+  //   await testToggleWithUrl(context, urls.externalIpWithPort)
   // });
 
   // it('Localhost', async () => {
   //   const url = 'http://localhost:3000'
-  //   await testToggleWithUrl(context, url)
+  //   await testToggleWithUrl(context, urls.localhost)
   // });
 
 
@@ -174,7 +165,7 @@ describe('When javascript is enabled, toggle should block sites', () => {
 
   // Fermeture du navigateur après tous les tests
   afterAll(async () => {
-    await context.browser.close();
+    //await context.browser.close();
   });
 });
 

@@ -6,7 +6,7 @@
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "test:e2e": "vue-cli-service test:unit e2e",
-    "test:unit": "vue-cli-service test:unit example",
+    "test:unit": "vue-cli-service test:unit functions",
     "test:watch": "vue-cli-service test:unit --watch",
     "lint": "vue-cli-service lint",
     "build-watch": "vue-cli-service build-watch --mode development",

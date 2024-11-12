@@ -157,6 +157,7 @@ export const getUrlAsObject = (url: string) => {
   let host;
   let domain;
   let subdomain;
+  let isIpAddress = false
 
   if (!matches) {
     throw new Error(`Invalid URL: ${url}`);
@@ -184,7 +185,7 @@ export const getUrlAsObject = (url: string) => {
     host = `${hostname}${port ? `:${port}` : ''}`;
 
     // Vérification si le hostname est une IP
-    const isIpAddress = /^(?:\d{1,3}\.){3}\d{1,3}$|^\[.*\]$/.test(hostname);
+    isIpAddress = /^(?:\d{1,3}\.){3}\d{1,3}$|^\[.*\]$/.test(hostname);
     
     if (isIpAddress) {
       domain = hostname;
@@ -214,6 +215,7 @@ export const getUrlAsObject = (url: string) => {
     path: pathname,
     pathnameUntilLastSlash,
     hostWithoutSubdomain,
+    isIpAddress
   };
 };
 

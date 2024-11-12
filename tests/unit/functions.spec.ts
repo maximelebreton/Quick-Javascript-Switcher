@@ -42,6 +42,7 @@ describe('It should extract url as object', () => {
       subdomain: '',
       path: '/*',
       pathnameUntilLastSlash: '',
+      isIpAddress: false
     });
 
     expect(getUrlAsObject('https://gist.github.com/*')).toEqual({
@@ -55,6 +56,7 @@ describe('It should extract url as object', () => {
       subdomain: 'gist.',
       path: '/*',
       pathnameUntilLastSlash: '',
+      isIpAddress: false
     });
 
     expect(getUrlAsObject('https://*.github.com/*')).toEqual({
@@ -68,6 +70,7 @@ describe('It should extract url as object', () => {
       subdomain: '*.',
       path: '/*',
       pathnameUntilLastSlash: '',
+      isIpAddress: false
     });
 
     expect(getUrlAsObject('*://*.github.com/*')).toEqual({
@@ -81,6 +84,7 @@ describe('It should extract url as object', () => {
       subdomain: '*.',
       path: '/*',
       pathnameUntilLastSlash: '',
+      isIpAddress: false
     });
     
     
@@ -95,6 +99,7 @@ describe('It should extract url as object', () => {
       subdomain: '',
       path: '/Users/Public/index.html',
       pathnameUntilLastSlash: '/Users/Public',
+      isIpAddress: false
     });
     
     expect(getUrlAsObject('http://localhost:3000/index.html')).toEqual({
@@ -108,6 +113,7 @@ describe('It should extract url as object', () => {
       subdomain: '',
       path: '/index.html',
       pathnameUntilLastSlash: '',
+      isIpAddress: false
     });
     
     expect(getUrlAsObject('http://127.0.0.1:8080/')).toEqual({
@@ -121,6 +127,7 @@ describe('It should extract url as object', () => {
       subdomain: '',
       path: '/',
       pathnameUntilLastSlash: '',
+      isIpAddress: true
     });
 
 
@@ -135,6 +142,7 @@ describe('It should extract url as object', () => {
       subdomain: '',
       path: '/test',
       pathnameUntilLastSlash: '',
+      isIpAddress: true
     });
   })
 })
@@ -146,7 +154,9 @@ describe('It should get potential patterns and sort it by precedence', () => {
       'http://gist.github.com/*',
       '*://gist.github.com/*',
       'http://*.github.com/*',
-      '*://*.github.com/*'
+      '*://*.github.com/*',
+      'http://github.com/*',
+      '*://github.com/*'
     ])
   })
 
@@ -155,11 +165,25 @@ describe('It should get potential patterns and sort it by precedence', () => {
       'http://*.github.com/*',
       'https://*.github.com/*',
       '*://*.github.com/*',
+      "http://github.com/*",
+      "https://github.com/*",
+      "*://github.com/*"
+    ])
+  })
+
+  it('Domain only maximelebreton', async () => {
+    expect(await getPotentialPatterns('https://maximelebreton.com/*')).toEqual([
+      "https://*.maximelebreton.com/*",
+      "*://*.maximelebreton.com/*",
+      'https://maximelebreton.com/*',
+      '*://maximelebreton.com/*',
     ])
   })
 
   it('Domain only', async () => {
     expect(await getPotentialPatterns('https://github.com/*')).toEqual([
+      "https://*.github.com/*",
+      "*://*.github.com/*",
       'https://github.com/*',
       '*://github.com/*',
     ])
@@ -170,7 +194,9 @@ describe('It should get potential patterns and sort it by precedence', () => {
       'https://gist.github.com/*',
       '*://gist.github.com/*',
       'https://*.github.com/*',
-      '*://*.github.com/*'
+      '*://*.github.com/*',
+      "https://github.com/*",
+      "*://github.com/*",
     ])
   })
 
@@ -187,8 +213,10 @@ describe('It should get potential patterns and sort it by precedence', () => {
     
   it('Localhost and port', async () => {
     expect(await getPotentialPatterns('http://localhost:3000/index.html')).toEqual([
-      'http://localhost:3000/*',
-      '*://localhost:3000/*',
+      "http://localhost:3000/*",
+      "http://*.localhost:3000/*",
+      "*://localhost:3000/*",
+      "*://*.localhost:3000/*",
     ])
   })
 
@@ -232,6 +260,8 @@ describe("Storage", () => {
   it('should sort urls by pattern precedence', () =>  {
 
     const unsortedUrls = [
+      'http://github.com/*',
+      '*://github.com/*',
       '*://*.github.com/*',
       'https://*.github.com/*',
       '*://gist.github.com/*',
@@ -244,9 +274,10 @@ console.log(sortedUrls, "SORTED")
       'https://gist.github.com/*',
       'https://*.github.com/*',
       '*://gist.github.com/*',
-      '*://*.github.com/*'
+      'http://github.com/*',
+      '*://*.github.com/*',
+      '*://github.com/*',
     ])
-
   })
 
   

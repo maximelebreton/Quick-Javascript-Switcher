@@ -44,7 +44,7 @@ export const getJavascriptRuleSetting = async ({
 };
 
 
-
+/*
 export const removeConflictedRulesFromPattern = async (tabPattern: string) => {
   const { scheme: tabScheme, subdomain: tabSubdomain, domain: tabDomain, hostWithoutSubdomain: tabHost } = getUrlAsObject(tabPattern);
 
@@ -56,17 +56,17 @@ export const removeConflictedRulesFromPattern = async (tabPattern: string) => {
     const { scheme: storageScheme, subdomain: storageSubdomain, domain: storageDomain, hostWithoutSubdomain: storageHost } = getUrlAsObject(storagePattern);
     cl({urlScheme: tabScheme, patternScheme: storageScheme, urlSubdomain: tabSubdomain, patternSubdomain: storageSubdomain, urlDomain: tabDomain, patternDomain: storageDomain, urlHost: tabHost, patternHost: storageHost}, Log.RULES, "Potential conflicted rules with: "+tabPattern)
     if (tabScheme !== storageScheme && tabSubdomain === storageSubdomain && tabHost === storageHost) {
-      await removeJavascriptRule(rule)
+      await removeJavascriptRuleIfExistInStorage(rule)
       cl(`Conflicted rule removed: ${storagePattern} (conflict with url: ${tabPattern})`, Log.RULES)
     } 
     if ((tabSubdomain === '*.' && storageSubdomain === '') && tabHost === storageHost) {
-      await removeJavascriptRule(rule)
+      await removeJavascriptRuleIfExistInStorage(rule)
       console.warn(`Conflicted rule removed: ${storagePattern} (conflict with url: ${tabPattern})`)
     }
   })
 
   //subdomain: `${scheme}${schemeSuffix}${subdomain}${domain}/*`,
-}
+}*/
 
 
 
@@ -129,7 +129,7 @@ export const clearJavascriptRule = ({
       return;
     }
 
-    await removeJavascriptRule(rule);
+    await removeJavascriptRuleIfExistInStorage(rule);
     if (tab) {
       await updateIcon(tab); //not needed because we update tab
       reloadTab(tab);
@@ -191,13 +191,14 @@ export const setJavascriptContentSettingWithPromise = async <T extends {
   })
 }
 
-export const removeJavascriptRule = async (
+export const removeJavascriptRuleIfExistInStorage = async (
   rule: Pick<QJS.ContentSettingRule, "primaryPattern" | "scope">
 ) => {
   return new Promise<void>(async (resolve, reject) => {
     const storageRules = await getStorageRules();
     console.log(rule.primaryPattern, 'removeJavascriptRule()')
-    console.log(storageRules, "STORAGE RULES BEFORE");
+    console.groupCollapsed()
+    console.log(storageRules[rule.primaryPattern], "STORAGE RULE BEFORE");
 
     if (
       storageRules &&
@@ -221,7 +222,8 @@ export const removeJavascriptRule = async (
       console.log('END Storage rules added to content settings:');
     }
 
-    console.log(storageRules, "STORAGE RULES AFTER");
+    console.log(storageRules[rule.primaryPattern], "STORAGE RULE AFTER");
+    console.groupEnd()
     resolve();
   });
 };

@@ -3,8 +3,7 @@ import {
   addJavascriptRule,
   clearJavascriptRule,
   getTabSetting,
-  removeConflictedRulesFromPattern,
-  removeJavascriptRule,
+  removeJavascriptRuleIfExistInStorage,
   RuleSetting,
   setJavascriptRule,
 } from "./contentsettings";
@@ -307,14 +306,18 @@ export const getPotentialPatternSchemes = (scheme: PatternScheme): PatternScheme
 
 export const getPotentialPatterns = async (primaryPattern: string) => {
 
-  const {scheme, schemeSuffix, subdomain, domain, path, hostWithoutSubdomain} = getUrlAsObject(primaryPattern)
+  const {scheme, schemeSuffix, subdomain, domain, path, hostWithoutSubdomain, isIpAddress} = getUrlAsObject(primaryPattern)
 
   const potentialPatterns: string[] = []
   
   const schemes = getPotentialPatternSchemes(scheme)
 
-  const subdomains = scheme === 'file' ? [] : [subdomain]
-  if (subdomain !== '*.' && subdomain !== '') subdomains.push('*.')
+  const subdomains: string[] = []
+  if (scheme !== 'file') {
+    subdomains.push(subdomain)
+    if (subdomain !== '') subdomains.push('')  
+    if (subdomain !== '*.' && isIpAddress === false) subdomains.push('*.')
+  }
 
 
   schemes.forEach((_scheme) => {
@@ -341,15 +344,68 @@ export const deepRemoveJavascriptRuleUntilSettingChange = async (
 
   // Utiliser une boucle `for await...of` pour itérer sur les patterns
   for await (const potentialPattern of potentialPatterns) {
-    if (oldSetting === await getTabSetting(tab)) {
-      console.log(`try to remove ${potentialPattern} !!!!!!!!!!!!!!!!!!`);
-      await removeJavascriptRule({
+    const setting = await getTabSetting(tab)
+    console.group()
+    console.log(`Setting for ${potentialPattern} is: ${setting}`)
+
+    if (oldSetting === setting) {
+      console.log(`Trying to remove ${potentialPattern}`)
+      await removeJavascriptRuleIfExistInStorage({
         primaryPattern: potentialPattern,
         scope: getScopeSetting(tab.incognito)
       });
     }
+    console.groupEnd()
   }
 };
+
+export const deepAddJavascriptRuleUntilSettingChange = async (tab: chrome.tabs.Tab, 
+  primaryPattern: string, 
+  oldSetting: RuleSetting) => {
+  const potentialPatterns = await getPotentialPatterns(primaryPattern);
+
+  const potentialPatternsToRemove = []
+
+  for await (const potentialPattern of potentialPatterns) {
+    const setting = await getTabSetting(tab)
+    console.group()
+    console.log(`Setting for ${potentialPattern} is: ${setting}`)
+
+    if (oldSetting === setting) {
+      console.log(`Trying to add ${potentialPattern}`)
+      await addJavascriptRule({
+        primaryPattern: potentialPattern,
+        scope: getScopeSetting(tab.incognito),
+        setting: oldSetting === 'allow' ? 'block' : 'allow'
+      });
+
+      const pontentialSetting = await getTabSetting(tab)
+
+      if (oldSetting === pontentialSetting) {
+        console.log(`Nothing has changed with this add, so we remove it: ${potentialPattern}`)
+        // IF NOTHING CHANGE, REMOVE THE RULE
+        potentialPatternsToRemove.push(potentialPattern)
+        
+      } else {
+        console.log(`Oh, the pattern ${potentialPattern} set the old setting '${oldSetting}' to '${pontentialSetting}'`)
+      }
+
+    }
+    console.groupEnd()
+  }
+  
+  // clean added rules!
+  console.log(`Clean these unused rules: ${potentialPatternsToRemove.join(', ')}`)
+  for await (const potentialPattern of potentialPatternsToRemove) {
+
+    await removeJavascriptRuleIfExistInStorage({
+      primaryPattern: potentialPattern,
+      scope: getScopeSetting(tab.incognito)
+    });
+
+  }
+
+}
 
 export const handleToggleByPattern = async (tab: chrome.tabs.Tab, primaryPattern: string) => {
 
@@ -363,18 +419,20 @@ export const handleToggleByPattern = async (tab: chrome.tabs.Tab, primaryPattern
     //await removeConflictedRulesFromPattern(primaryPattern)
 
     // 1: try to clear the primary pattern
-    await removeJavascriptRule({
+    await removeJavascriptRuleIfExistInStorage({
       primaryPattern: primaryPattern,
       scope: getScopeSetting(tab.incognito)
     })
 
     // 2: if not toggle, try to deep clear the potential conflicted patterns
-    const isSame = oldSetting === await getTabSetting(tab)
-    console.log(isSame, "IS SAME ??????????????")
     if (oldSetting === await getTabSetting(tab)) {
        await deepRemoveJavascriptRuleUntilSettingChange(tab, primaryPattern, oldSetting)
     }
-    // 3: if not toggle, set to allow
+    // 3: if not toggle, test potential patterns javascript content setting rule
+    if (oldSetting === await getTabSetting(tab)) {
+      await deepAddJavascriptRuleUntilSettingChange(tab, primaryPattern, oldSetting)
+    }
+    // 4: if not toggle, add primary pattern
     if (oldSetting === await getTabSetting(tab)) {
       await addJavascriptRule({
         primaryPattern,
